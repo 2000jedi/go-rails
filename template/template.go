@@ -1,21 +1,17 @@
 package template
 
 import (
-	"io/ioutil"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"strings"
 )
 
-var format []string
-var vars []string
-var varInferring map[string]chan string
-var varInferred map[string]string
-var typedefs []string
-
-func appendString(content string) {
-	format = append(format, "_gen += \""+strings.Replace(content, "\n", `\n`, -1)+"\"")
-}
+var format []string                     // code generation main function body
+var vars []string                       // list of variables
+var varInferring map[string]chan string // middleware for variable type inference
+var varInferred map[string]string       // storage for variable type inference
+var typedefs []string                   // definitions of structs
 
 func addVariable(variable string) {
 	for _, data := range strings.Split(variable, " ") {
@@ -57,9 +53,8 @@ func walkThrough(content []byte) {
 		if content[iter] == '{' && iter < len(content)-1 {
 			switch content[iter+1] {
 			case '{':
-				//fmt.Println(preIter, iter)
 				if preIter < iter {
-					appendString(string(content[preIter:iter]))
+					format = append(format, "_gen += \""+strings.Replace(string(content[preIter:iter]), "\n", `\n`, -1)+"\"")
 				}
 				found := false
 				for nextIter := iter; nextIter < len(content)-1; nextIter++ {
@@ -77,9 +72,8 @@ func walkThrough(content []byte) {
 				}
 
 			case '%':
-				//fmt.Println(preIter, iter)
 				if preIter < iter {
-					appendString(string(content[preIter:iter]))
+					format = append(format, "_gen += \""+strings.Replace(string(content[preIter:iter]), "\n", `\n`, -1)+"\"")
 				}
 				found := false
 				for nextIter := iter; nextIter < len(content)-1; nextIter++ {
@@ -100,7 +94,7 @@ func walkThrough(content []byte) {
 		}
 	}
 	if preIter < len(content) {
-		appendString(string(content[preIter:]))
+		format = append(format, "_gen += \""+strings.Replace(string(content[preIter:]), "\n", `\n`, -1)+"\"")
 	}
 }
 
@@ -113,7 +107,7 @@ func inferTypes(variable string, r chan string) {
 		vars := strings.Split(variable, "|")
 		middleWare := <-varInferring[vars[0]]
 		go write(varInferring[vars[0]], middleWare)
-		if strings.HasPrefix(middleWare, "type"){
+		if strings.HasPrefix(middleWare, "type") {
 			r <- "[]" + strings.Replace(vars[0], ".", "_", -1) + "__class"
 		} else {
 			r <- "[]" + middleWare
@@ -122,7 +116,7 @@ func inferTypes(variable string, r chan string) {
 	}
 	var instances []string
 	for _, allVariable := range vars {
-		if strings.Contains(allVariable, variable + ".") && !strings.ContainsRune(strings.TrimPrefix(allVariable, variable + "."), '.'){
+		if strings.Contains(allVariable, variable+".") && !strings.ContainsRune(strings.TrimPrefix(allVariable, variable+"."), '.') {
 			instances = append(instances, allVariable)
 		}
 	}
@@ -133,21 +127,14 @@ func inferTypes(variable string, r chan string) {
 		for _, subVar := range instances {
 			middleWare := <-varInferring[subVar]
 			go write(varInferring[subVar], middleWare)
-			typedef += "    " + strings.TrimPrefix(subVar, variable + ".") + " " + middleWare + "\n"
+			typedef += "    " + strings.TrimPrefix(subVar, variable+".") + " " + middleWare + "\n"
 		}
-		typedefs = append(typedefs, typedef + "}")
+		typedefs = append(typedefs, typedef+"}")
 		r <- strings.Replace(variable, ".", "_", -1) + "__class"
 	}
 }
 
-func Gen(filename string) {
-	content, _ := ioutil.ReadFile(filename)
-	walkThrough(content)
-
-	//for _, v := range format {
-	//	fmt.Println(v)
-	//}
-
+func varInfer() {
 	varInferring = make(map[string]chan string)
 	varInferred = make(map[string]string)
 
@@ -171,7 +158,16 @@ func Gen(filename string) {
 			varInferred[v] = <-varInferring[v]
 		}
 	}
+}
 
+func Gen(filename string) {
+	content, _ := ioutil.ReadFile(filename)
+	walkThrough(content)
+	for _, v := range format {
+		fmt.Println(v)
+	}
+
+	varInfer()
 	for k, v := range varInferred {
 		fmt.Println(k, v)
 	}
