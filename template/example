@@ -1,0 +1,10 @@
+<body>
+    {{ content_1 }}
+    {% for x in xs %}
+        {{ x.id.first }}
+        {{ x.prim.first }}
+        {{ x.id.second }}
+    {% endfor %}
+    {% if A == '' %} STH {% endif %}
+</body>
+
