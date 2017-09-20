@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"sort"
 	"strings"
-	"os/exec"
 )
 
 var genHTML []string // code generation genHTML function body
@@ -267,7 +267,7 @@ func Gen(filename string) {
 	gen += "\nfunc genHTML("
 	for k, v := range varType {
 		if !strings.ContainsRune(k, '.') && !inFor(k) {
-			if strings.HasPrefix(v, "[]") && v != "[]string"{
+			if strings.HasPrefix(v, "[]") && v != "[]string" {
 				gen += k + " []map[string]interface{},"
 			} else {
 				if v != "string" {
@@ -304,10 +304,6 @@ func Gen(filename string) {
 		}
 	}
 	gen = gen[:len(gen)-1] + ")\n}"
-	saveFile(gen, filename)
-	exec.Command("go fmt " + filename)
-}
-
-func saveFile(gen string, path string) {
-	ioutil.WriteFile(path+".go", []byte(gen), 0644)
+	ioutil.WriteFile(filename+".go", []byte(gen), os.ModePerm)
+	exec.Command("go", "fmt", filename + ".go")
 }
