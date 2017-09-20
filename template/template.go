@@ -251,6 +251,11 @@ func inFor(v string) bool {
 }
 
 func Gen(filename string) {
+	// Initialize
+	genHTML = []string{}
+	construct = []string{}
+	vars = []string{}
+
 	content, _ := ioutil.ReadFile(filename + ".html")
 	walkThrough(content)
 	varInfer()
