@@ -297,7 +297,7 @@ func Gen(filename string) {
 			gen += v + "\n"
 		}
 	}
-	gen += "\nreturn getHTML("
+	gen += "\nreturn genHTML("
 	for k := range varType {
 		if !strings.ContainsRune(k, '.') && !inFor(k) {
 			gen += k + ","
@@ -305,5 +305,5 @@ func Gen(filename string) {
 	}
 	gen = gen[:len(gen)-1] + ")\n}"
 	ioutil.WriteFile(filename+".go", []byte(gen), os.ModePerm)
-	exec.Command("go", "fmt", filename + ".go")
+	exec.Command("go", "fmt", filename + ".go").Output()
 }
