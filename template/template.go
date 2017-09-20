@@ -4,14 +4,21 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"sort"
 	"strings"
+	"os/exec"
 )
 
-var format []string                     // code generation main function body
+var genHTML []string // code generation genHTML function body
+type constructSort []string
+
+var construct constructSort // code generation construct function body
+//var typedefs []string                   // definitions of structs
+
+var varReady map[string]chan string     // used in VarFill
 var vars []string                       // list of variables
 var varInferring map[string]chan string // middleware for variable type inference
-var varInferred map[string]string       // storage for variable type inference
-var typedefs []string                   // definitions of structs
+var varType map[string]string           // storage for variable type inference
 
 func addVariable(variable string) {
 	for _, data := range strings.Split(variable, " ") {
@@ -21,13 +28,13 @@ func addVariable(variable string) {
 			}
 		}
 	}
-	format = append(format, "_gen += "+variable)
+	genHTML = append(genHTML, "_gen += "+strings.Replace(variable, ".", "_", -1))
 }
 
 func addOperation(content string) {
 	if strings.Contains(content, " for ") {
 		vars = append(vars, strings.Split(strings.TrimPrefix(content, " for "), " in ")[0]+"|"+strings.TrimSuffix(strings.Split(content, " in ")[1], " "))
-		format = append(format, strings.Replace(content, " in ", " := ", 1)[1:]+"{")
+		genHTML = append(genHTML, strings.Replace(strings.Replace(content, " in ", " := range ", 1)[1:]+"{", "for ", "for _, ", -1))
 		return
 	}
 	if strings.Contains(content, " if ") {
@@ -38,11 +45,11 @@ func addOperation(content string) {
 				}
 			}
 		}
-		format = append(format, content[1:]+"{")
+		genHTML = append(genHTML, content[1:]+"{")
 		return
 	}
 	if strings.Contains(content, " endfor ") || strings.Contains(content, " endif ") {
-		format = append(format, "}")
+		genHTML = append(genHTML, "}")
 		return
 	}
 }
@@ -54,7 +61,7 @@ func walkThrough(content []byte) {
 			switch content[iter+1] {
 			case '{':
 				if preIter < iter {
-					format = append(format, "_gen += \""+strings.Replace(string(content[preIter:iter]), "\n", `\n`, -1)+"\"")
+					genHTML = append(genHTML, "_gen += \""+strings.Replace(string(content[preIter:iter]), "\n", `\n`, -1)+"\"")
 				}
 				found := false
 				for nextIter := iter; nextIter < len(content)-1; nextIter++ {
@@ -73,7 +80,7 @@ func walkThrough(content []byte) {
 
 			case '%':
 				if preIter < iter {
-					format = append(format, "_gen += \""+strings.Replace(string(content[preIter:iter]), "\n", `\n`, -1)+"\"")
+					genHTML = append(genHTML, "_gen += \""+strings.Replace(string(content[preIter:iter]), "\n", `\n`, -1)+"\"")
 				}
 				found := false
 				for nextIter := iter; nextIter < len(content)-1; nextIter++ {
@@ -94,7 +101,7 @@ func walkThrough(content []byte) {
 		}
 	}
 	if preIter < len(content) {
-		format = append(format, "_gen += \""+strings.Replace(string(content[preIter:]), "\n", `\n`, -1)+"\"")
+		genHTML = append(genHTML, "_gen += \""+strings.Replace(string(content[preIter:]), "\n", `\n`, -1)+"\"")
 	}
 }
 
@@ -123,20 +130,22 @@ func inferTypes(variable string, r chan string) {
 	if len(instances) == 0 {
 		r <- "string"
 	} else {
-		typedef := "type " + strings.Replace(variable, ".", "_", -1) + "__class struct { \n"
-		for _, subVar := range instances {
-			middleWare := <-varInferring[subVar]
-			go write(varInferring[subVar], middleWare)
-			typedef += "    " + strings.TrimPrefix(subVar, variable+".") + " " + middleWare + "\n"
-		}
-		typedefs = append(typedefs, typedef+"}")
+		/*
+			typedef := "type " + strings.Replace(variable, ".", "_", -1) + "__class struct { \n"
+			for _, subVar := range instances {
+				middleWare := <-varInferring[subVar]
+				go write(varInferring[subVar], middleWare)
+				typedef += "    " + strings.TrimPrefix(subVar, variable+".") + " " + middleWare + "\n"
+			}
+			typedefs = append(typedefs, typedef+"}")
+		*/
 		r <- strings.Replace(variable, ".", "_", -1) + "__class"
 	}
 }
 
 func varInfer() {
 	varInferring = make(map[string]chan string)
-	varInferred = make(map[string]string)
+	varType = make(map[string]string)
 
 	for _, v := range vars {
 		varInferring[v] = make(chan string)
@@ -154,24 +163,151 @@ func varInfer() {
 	}
 
 	for _, v := range vars {
-		if !strings.ContainsRune(v, '.') {
-			varInferred[v] = <-varInferring[v]
+		if strings.ContainsRune(v, '|') {
+			varType[strings.Split(v, "|")[1]] = <-varInferring[v]
+		} else {
+			varType[v] = <-varInferring[v]
+		}
+		close(varInferring[v])
+	}
+}
+
+func singleVarFill(v string, c chan string) {
+	switch varType[v] {
+	case "string":
+		if strings.ContainsRune(v, '.') {
+			v_ := strings.Replace(v, ".", "_", -1)
+			v_parent := v_[:strings.LastIndex(v_, "_")]
+			v_name := strings.Split(v, ".")
+			c <- v_ + " := " + v_parent + "[\"" + v_name[len(v_name)-1] + "\"].(string)"
+		} else {
+			c <- v + " := m[\"" + v + "\"].(string)"
+		}
+	case "[]string":
+		if strings.ContainsRune(v, '.') {
+			v_ := strings.Replace(v, ".", "_", -1)
+			v_parent := v_[:strings.LastIndex(v_, "_")]
+			v_name := strings.Split(v, ".")
+			c <- v_ + " := " + v_parent + "[\"" + v_name[len(v_name)-1] + "\"].([]string)"
+		} else {
+			c <- v + " := m[\"" + v + "\"].([]string)"
+		}
+	default:
+		if strings.HasPrefix(varType[v], "[]") {
+			if strings.ContainsRune(v, '.') {
+				v_ := strings.Replace(v, ".", "_", -1)
+				v_parent := v_[:strings.LastIndex(v_, "_")]
+				v_name := strings.Split(v, ".")
+				c <- v_ + " := " + v_parent + "[\"" + v_name[len(v_name)-1] + "\"].([]map[string]interface{})"
+			} else {
+				c <- v + " := m[\"" + v + "\"].([]map[string]interface{})"
+			}
+		} else {
+			if strings.ContainsRune(v, '.') {
+				v_ := strings.Replace(v, ".", "_", -1)
+				v_parent := v_[:strings.LastIndex(v_, "_")]
+				v_name := strings.Split(v, ".")
+				c <- v_ + " := " + v_parent + "[\"" + v_name[len(v_name)-1] + "\"].(map[string]interface{})"
+			} else {
+				c <- v + " := m[\"" + v + "\"].(map[string]interface{})"
+			}
 		}
 	}
 }
 
-func Gen(filename string) {
-	content, _ := ioutil.ReadFile(filename)
-	walkThrough(content)
-	for _, v := range format {
-		fmt.Println(v)
+func (s constructSort) Len() int {
+	return len(s)
+}
+
+func (s constructSort) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+func (s constructSort) Less(i, j int) bool {
+	return strings.Count(s[i], "_") < strings.Count(s[j], "_")
+}
+
+func varFill() {
+	varReady = make(map[string]chan string)
+	for v := range varType {
+		varReady[v] = make(chan string)
+	}
+	for v := range varType {
+		go singleVarFill(v, varReady[v])
 	}
 
+	for v := range varType {
+		construct = append(construct, <-varReady[v])
+	}
+
+	sort.Sort(construct)
+}
+
+func inFor(v string) bool {
+	for _, i := range vars {
+		if strings.HasPrefix(i, v+"|") {
+			return true
+		}
+	}
+	return false
+}
+
+func Gen(filename string) {
+	content, _ := ioutil.ReadFile(filename + ".html")
+	walkThrough(content)
 	varInfer()
-	for k, v := range varInferred {
-		fmt.Println(k, v)
+	varFill()
+	gen := ""
+	gen += "package template\n"
+	/*
+		for _, v := range typedefs {
+			gen += v + "\n"
+		}
+	*/
+	gen += "\nfunc genHTML("
+	for k, v := range varType {
+		if !strings.ContainsRune(k, '.') && !inFor(k) {
+			if strings.HasPrefix(v, "[]") && v != "[]string"{
+				gen += k + " []map[string]interface{},"
+			} else {
+				if v != "string" {
+					gen += k + " map[string]interface{}"
+				} else {
+					gen += k + " " + v + ","
+				}
+			}
+		}
 	}
-	for _, v := range typedefs {
-		fmt.Println(v)
+	gen = gen[:len(gen)-1] + ")(_gen string){\n_gen = \"\"\n"
+	for _, v := range genHTML {
+		gen += v + "\n"
+		if strings.HasPrefix(v, "for ") {
+			variable := strings.Split(strings.TrimPrefix(v, "for _, "), " :=")[0]
+			for _, line := range construct {
+				if strings.HasPrefix(line, variable+"_") {
+					gen += line + "\n"
+				}
+			}
+		}
 	}
+	gen += "\nreturn\n}\n\nfunc Construct(m map[string]interface{})(string) {\n"
+	for _, v := range construct {
+		curVar := strings.Split(v, " :=")[0]
+		if !strings.ContainsRune(curVar, '_') && !inFor(curVar) {
+			gen += v + "\n"
+		}
+	}
+	gen += "\nreturn getHTML("
+	for k := range varType {
+		if !strings.ContainsRune(k, '.') && !inFor(k) {
+			gen += k + ","
+		}
+	}
+	gen = gen[:len(gen)-1] + ")\n}"
+	saveFile(gen, filename)
+	exec.Command("go fmt " + filename)
+}
+
+func saveFile(gen string, path string) {
+	ioutil.WriteFile(path+".go", []byte(gen), 0644)
 }
