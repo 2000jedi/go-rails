@@ -1,0 +1,4 @@
+package Model
+
+func SetModel() {
+}

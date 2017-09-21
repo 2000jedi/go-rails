@@ -19,6 +19,22 @@ var vars []string                       // list of variables
 var varInferring map[string]chan string // middleware for variable type inference
 var varType map[string]string           // storage for variable type inference
 
+func parseVariable(variable string)(string) {
+	if strings.Contains(variable, "__"){
+		fmt.Println("variable name invalid: contains '__'")
+		panic(variable)
+	}
+	for _, i := range []rune(variable) {
+		if !strings.ContainsRune(" abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXY_.", i){
+			fmt.Println("variable name invalid: illegal literal '" + string(i) + "'")
+			panic(variable)
+		}
+	}
+	return strings.Replace(variable, ".", "__", -1)
+}
+
+// AddVariable identifies all the variables within the {{ }} like {{ a + b * 2 }}, where every operator and variable
+// should be separated by a space
 func addVariable(variable string) {
 	for _, data := range strings.Split(variable, " ") {
 		if len(data) > 0 {
@@ -27,7 +43,7 @@ func addVariable(variable string) {
 			}
 		}
 	}
-	genHTML = append(genHTML, "_gen += "+strings.Replace(variable, ".", "__", -1))
+	genHTML = append(genHTML, "_gen += "+ parseVariable(variable))
 }
 
 func addOperation(content string) {
@@ -42,7 +58,7 @@ func addOperation(content string) {
 			if len(data) > 0 {
 				if (data[0] <= 'z' && data[0] >= 'a') || (data[0] <= 'Z' && data[0] >= 'A') {
 					vars = append(vars, data)
-					inc += strings.Replace(data, ".", "__", -1) + " "
+					inc += parseVariable(data) + " "
 				} else {
 					inc += data + " "
 				}
@@ -82,7 +98,7 @@ func walkThrough(content []byte) {
 				}
 				if !found {
 					fmt.Printf(`expected }} found EOF`)
-					os.Exit(-1)
+					panic(string(content[preIter:iter-preIter+1]))
 				}
 
 			case '%':
@@ -101,7 +117,7 @@ func walkThrough(content []byte) {
 				}
 				if !found {
 					fmt.Printf(`expected %} found EOF`)
-					os.Exit(-1)
+					panic(string(content[preIter:iter-preIter+1]))
 				}
 
 			}
@@ -122,7 +138,7 @@ func inferTypes(variable string, r chan string) {
 		middleWare := <-varInferring[vars[0]]
 		go write(varInferring[vars[0]], middleWare)
 		if strings.HasPrefix(middleWare, "type") {
-			r <- "[]" + strings.Replace(vars[0], ".", "__", -1) + "___class"
+			r <- "[]" + parseVariable(vars[0]) + "___class"
 		} else {
 			r <- "[]" + middleWare
 		}
@@ -137,7 +153,7 @@ func inferTypes(variable string, r chan string) {
 	if len(instances) == 0 {
 		r <- "string"
 	} else {
-		r <- strings.Replace(variable, ".", "__", -1) + "___class"
+		r <- parseVariable(variable) + "___class"
 	}
 }
 
@@ -174,7 +190,7 @@ func singleVarFill(v string, c chan string) {
 	switch varType[v] {
 	case "string":
 		if strings.ContainsRune(v, '.') {
-			v_ := strings.Replace(v, ".", "__", -1)
+			v_ := parseVariable(v)
 			v_parent := v_[:strings.LastIndex(v_, "__")]
 			v_name := strings.Split(v, ".")
 			c <- v_ + " := " + v_parent + "[`" + v_name[len(v_name)-1] + "`].(string)"
@@ -183,7 +199,7 @@ func singleVarFill(v string, c chan string) {
 		}
 	case "[]string":
 		if strings.ContainsRune(v, '.') {
-			v_ := strings.Replace(v, ".", "__", -1)
+			v_ := parseVariable(v)
 			v_parent := v_[:strings.LastIndex(v_, "__")]
 			v_name := strings.Split(v, ".")
 			c <- v_ + " := " + v_parent + "[`" + v_name[len(v_name)-1] + "`].([]string)"
@@ -193,7 +209,7 @@ func singleVarFill(v string, c chan string) {
 	default:
 		if strings.HasPrefix(varType[v], "[]") {
 			if strings.ContainsRune(v, '.') {
-				v_ := strings.Replace(v, ".", "__", -1)
+				v_ := parseVariable(v)
 				v_parent := v_[:strings.LastIndex(v_, "__")]
 				v_name := strings.Split(v, ".")
 				c <- v_ + " := " + v_parent + "[`" + v_name[len(v_name)-1] + "`].([]map[string]interface{})"
@@ -202,7 +218,7 @@ func singleVarFill(v string, c chan string) {
 			}
 		} else {
 			if strings.ContainsRune(v, '.') {
-				v_ := strings.Replace(v, ".", "__", -1)
+				v_ := parseVariable(v)
 				v_parent := v_[:strings.LastIndex(v_, "__")]
 				v_name := strings.Split(v, ".")
 				c <- v_ + " := " + v_parent + "[`" + v_name[len(v_name)-1] + "`].(map[string]interface{})"
@@ -301,5 +317,5 @@ func Gen(filename string) {
 	}
 	gen += "\nreturn genHTML_" + filename[strings.LastIndex(filename, "/")+1:] + "(" + vCall[:len(vCall)-1] + ")\n}"
 	ioutil.WriteFile(filename+".go", []byte(gen), os.ModePerm)
-	exec.Command("go", "fmt", filename + ".go").Output()
+	exec.Command("go", "fmt", filename+".go").Output()
 }
