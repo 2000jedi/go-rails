@@ -46,7 +46,7 @@ func genModel(data map[string]map[string]map[string]string) {
 		model += "tables[`" + table + "`].name = `" + table + "`\n"
 		model += "tables[`" + table + "`].v = []CellStruct{{`id`, INT},"
 
-		cells := "[]Cell{{`id`, INT, nil},"
+		cells := "[]Cell{{`id`, INT, ``},"
 		scanint := 0
 		for name, props := range v {
 			if name == "id" {
@@ -62,22 +62,22 @@ func genModel(data map[string]map[string]map[string]string) {
 				genTable += ` DEFAULT ` + val
 			}
 			model += "{`" + name + "`, " + props["type"] + "},"
-			cells += "{`" + name + "`, " + props["type"] + ", nil},"
+			cells += "{`" + name + "`, " + props["type"] + ", ``},"
 			genTable += ","
 			scanint ++
 		}
 		gensql = append(gensql, genTable[:len(genTable)-1]+`);`)
-		model = model[:len(model)-1] + "}\ntables[`" + table + "`].query = func(rows *sql.Rows) (t Table) {\nt.m = *tables[`"+ table + "`]\nvar tabledata [][]Cell\ndefer rows.Close()\nfor rows.Next() {\ntabulardata :="
-		model += cells[:len(cells)-1] + "}\nerr := rows.Scan("
+		model = model[:len(model)-1] + "}\ntables[`" + table + "`].query = func(rows *sql.Rows) (t Table) {\nvar tabledata [][]Cell\ndefer rows.Close()\nfor rows.Next() {\ntabulardata :="
+		model += cells[:len(cells)-1] + "}\nvar scan [" + strconv.Itoa(scanint + 1) + "]interface{}\nerr := rows.Scan("
 		for i := 0; i <= scanint;i++{
-			model += "&tabulardata[" + strconv.Itoa(i) + "].data,"
+			model += "&scan[" + strconv.Itoa(i) + "],"
 		}
-		model = model[:len(model)-1] + ")\ncheckErrorDB(err)\ntabledata = append(tabledata, tabulardata)\n}\nt.v = tabledata\nreturn t\n}\n"
+		model = model[:len(model)-1] + ")\nfor i:=0;i<=" + strconv.Itoa(scanint) + ";i++ {\ntabulardata[i].data = Cast(tabulardata[i], scan[i])\n}\ncheckErrorDB(err)\ntabledata = append(tabledata, tabulardata)\n}\nt = tabledata\nreturn t\n}\n"
 	}
 
 	model += "\n}\n"
 
-	fmt.Println(gensql)
+	fmt.Println(model)
 }
 
 func main() {

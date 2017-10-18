@@ -17,7 +17,7 @@ type CellStruct struct {
 type Cell struct {
 	name string
 	T    CellType
-	data interface{}
+	data string
 }
 
 type TableType struct {
@@ -26,27 +26,24 @@ type TableType struct {
 	query func(rows *sql.Rows) Table // perform rows.Scan() action
 }
 
-type Table struct {
-	m TableType
-	v [][]Cell
-}
+type Table [][]Cell
 
-func Cast(cell Cell) string {
+func Cast(cell Cell, data interface{}) string {
 	switch cell.T {
 	case INT:
-		return strconv.FormatInt(cell.data.(int64), 10)
+		return strconv.FormatInt(data.(int64), 10)
 	case FLOAT:
-		return strconv.FormatFloat(cell.data.(float64), 'f', 6, 64)
+		return strconv.FormatFloat(data.(float64), 'f', 6, 64)
 	case TEXT:
-		return string(cell.data.([]uint8))
+		return string(data.([]uint8))
 	case FILE:
-		return cell.data.(string)
+		return data.(string)
 	case CHAR:
-		return string([]byte{byte(cell.data.(rune))})
+		return string([]byte{byte(data.(rune))})
 	case DATETIME:
-		return cell.data.(time.Time).String()
+		return data.(time.Time).String()
 	case FOREIGNKEY:
-		return strconv.FormatInt(cell.data.(int64), 10)
+		return strconv.FormatInt(data.(int64), 10)
 	default:
 		return ""
 	}
@@ -74,5 +71,5 @@ const (
 var database DB
 
 func Table_test() {
-	fmt.Println(Cast(tables["user"].all().v[1][1]))
+	fmt.Println(tables["user"].all())
 }
