@@ -1,0 +1,17 @@
+{
+  "test": {
+    "name": {
+      "type": "INT",
+      "default": "0"
+    },
+    "time": {
+      "type": "DATETIME",
+      "default": "now"
+    }
+  },
+  "user": {
+    "username": {
+      "type": "TEXT"
+    }
+  }
+}

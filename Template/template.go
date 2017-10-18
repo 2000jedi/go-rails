@@ -1,6 +1,7 @@
-package template
+package main
 
 import (
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -19,14 +20,14 @@ var vars []string                       // list of variables
 var varInferring map[string]chan string // middleware for variable type inference
 var varType map[string]string           // storage for variable type inference
 
-func parseVariable(variable string)(string) {
-	if strings.Contains(variable, "__"){
-		fmt.Println("variable name invalid: contains '__'")
+func parseVariable(variable string) string {
+	if strings.Contains(variable, "__") {
+		fmt.Fprintln(os.Stderr, "variable name invalid: contains '__'")
 		panic(variable)
 	}
 	for _, i := range []rune(variable) {
-		if !strings.ContainsRune(" abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXY_.", i){
-			fmt.Println("variable name invalid: illegal literal '" + string(i) + "'")
+		if !strings.ContainsRune(" abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXY_.", i) {
+			fmt.Fprintln(os.Stderr, "variable name invalid: illegal literal '"+string(i)+"'")
 			panic(variable)
 		}
 	}
@@ -43,7 +44,7 @@ func addVariable(variable string) {
 			}
 		}
 	}
-	genHTML = append(genHTML, "_gen += "+ parseVariable(variable))
+	genHTML = append(genHTML, "_gen += "+parseVariable(variable))
 }
 
 func addOperation(content string) {
@@ -97,8 +98,8 @@ func walkThrough(content []byte) {
 					}
 				}
 				if !found {
-					fmt.Printf(`expected }} found EOF`)
-					panic(string(content[preIter:iter-preIter+1]))
+					fmt.Fprintln(os.Stderr, `expected }} found EOF`)
+					panic(string(content[preIter : iter-preIter+1]))
 				}
 
 			case '%':
@@ -116,8 +117,8 @@ func walkThrough(content []byte) {
 					}
 				}
 				if !found {
-					fmt.Printf(`expected %} found EOF`)
-					panic(string(content[preIter:iter-preIter+1]))
+					fmt.Fprintln(os.Stderr, `expected %} found EOF`)
+					panic(string(content[preIter : iter-preIter+1]))
 				}
 
 			}
@@ -318,4 +319,19 @@ func Gen(filename string) {
 	gen += "\nreturn genHTML_" + filename[strings.LastIndex(filename, "/")+1:] + "(" + vCall[:len(vCall)-1] + ")\n}"
 	ioutil.WriteFile(filename+".go", []byte(gen), os.ModePerm)
 	exec.Command("go", "fmt", filename+".go").Output()
+}
+
+func main() {
+	flag.Parse()
+
+	dir, err := ioutil.ReadDir(flag.Arg(0))
+	if err != nil {
+		fmt.Println("permission denied", flag.Arg(0))
+		os.Exit(-1)
+	}
+	for _, f := range dir {
+		if !f.IsDir() && strings.HasSuffix(f.Name(), ".html") {
+			Gen(flag.Arg(0) + "/" + strings.TrimSuffix(f.Name(), ".html"))
+		}
+	}
 }
