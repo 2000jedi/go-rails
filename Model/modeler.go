@@ -38,7 +38,7 @@ func Cast(cell Cell) string {
 	case FLOAT:
 		return strconv.FormatFloat(cell.data.(float64), 'f', 6, 64)
 	case TEXT:
-		return cell.data.(string)
+		return string(cell.data.([]uint8))
 	case FILE:
 		return cell.data.(string)
 	case CHAR:

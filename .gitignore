@@ -1,3 +1,7 @@
 .idea/*
 *.iml
 go-rails
+
+Template/example/dashboard_s.go
+
+Template/example/dashboard_s.html
