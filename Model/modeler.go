@@ -1,10 +1,11 @@
 package Model
 
+// Example: table["user"].all(); table["user"].count()
+
 import (
 	"database/sql"
 	"strconv"
 	"time"
-	"fmt"
 )
 
 type CellType int
@@ -69,7 +70,3 @@ const (
 )
 
 var database DB
-
-func Table_test() {
-	fmt.Println(tables["user"].all())
-}

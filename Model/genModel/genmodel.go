@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"strconv"
+	"os/exec"
 )
 
 func jsonParse(data []byte) map[string]map[string]map[string]string {
@@ -36,7 +37,7 @@ func jsonParse(data []byte) map[string]map[string]map[string]string {
 
 var gensql []string
 
-func genModel(data map[string]map[string]map[string]string) {
+func genModel(data map[string]map[string]map[string]string) string {
 	model := "package Model\n\nimport \"database/sql\"\n\n\nvar tables map[string]*TableType\n\nfunc init(){\ndatabase.connect(`main.sqlite`)\ntables = make(map[string]*TableType)\n\n"
 
 	for table, v := range data {
@@ -77,18 +78,19 @@ func genModel(data map[string]map[string]map[string]string) {
 
 	model += "\n}\n"
 
-	fmt.Println(model)
+	fmt.Println(gensql)
+	return model
 }
 
 func main() {
 	flag.Parse()
 	dest := flag.Arg(0)
-	dest = "/Users/jedi/go/src/go-rails/Model/genModel/example.json"
 	data, err := ioutil.ReadFile(dest)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error reading model file ", flag.Arg(0))
+		fmt.Fprintln(os.Stderr, "error reading model file ", dest)
 		panic(err)
 	}
 
-	genModel(jsonParse(data))
+	ioutil.WriteFile("model.go", []byte(genModel(jsonParse(data))), os.ModePerm)
+	exec.Command("go", "fmt", "model.go").Output()
 }
