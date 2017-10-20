@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-func checkErrorDB(err error) {
+func CheckErrorDB(err error) {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error connecting to database:", err)
 		panic(err)
@@ -18,10 +18,10 @@ type DB struct {
 	db *sql.DB
 }
 
-func (d *DB) connect(path string) {
+func (d *DB) Connect(path string) {
 	db, err := sql.Open("sqlite3", path)
-	checkErrorDB(err)
-	checkErrorDB(db.Ping())
+	CheckErrorDB(err)
+	CheckErrorDB(db.Ping())
 	d.db = db
 }
 
@@ -31,13 +31,13 @@ func (d DB) stop() {
 
 func (d DB) query(querystring string, model TableType) Table {
 	rows, err := d.db.Query(querystring)
-	checkErrorDB(err)
-	return model.query(rows)
+	CheckErrorDB(err)
+	return model.Query(rows)
 }
 
 func (d DB) count(tableName string) (cnt int) {
 	queryString := `select count(*) from '` + tableName + `'`
-	err := database.db.QueryRow(queryString, 1).Scan(&cnt)
-	checkErrorDB(err)
+	err := d.db.QueryRow(queryString, 1).Scan(&cnt)
+	CheckErrorDB(err)
 	return
 }

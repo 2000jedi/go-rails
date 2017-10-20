@@ -20,22 +20,18 @@ var vars []string                       // list of variables
 var varInferring map[string]chan string // middleware for variable type inference
 var varType map[string]string           // storage for variable type inference
 
+// Make fields of variables independent of struct. Use '__' to indicate fields under a map
 func parseVariable(variable string) string {
 	if strings.Contains(variable, "__") {
 		fmt.Fprintln(os.Stderr, "variable name invalid: contains '__'")
 		panic(variable)
-	}
-	for _, i := range []rune(variable) {
-		if !strings.ContainsRune(" abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXY_.", i) {
-			fmt.Fprintln(os.Stderr, "variable name invalid: illegal literal '"+string(i)+"'")
-			panic(variable)
-		}
 	}
 	return strings.Replace(variable, ".", "__", -1)
 }
 
 // AddVariable identifies all the variables within the {{ }} like {{ a + b * 2 }}, where every operator and variable
 // should be separated by a space
+// TODO: redefine such a + b
 func addVariable(variable string) {
 	for _, data := range strings.Split(variable, " ") {
 		if len(data) > 0 {
@@ -47,6 +43,7 @@ func addVariable(variable string) {
 	genHTML = append(genHTML, "_gen += "+parseVariable(variable))
 }
 
+// Parse For and If clauses
 func addOperation(content string) {
 	if strings.Contains(content, " for ") {
 		vars = append(vars, strings.Split(strings.TrimPrefix(content, " for "), " in ")[0]+"|"+strings.TrimSuffix(strings.Split(content, " in ")[1], " "))
@@ -78,6 +75,7 @@ func addOperation(content string) {
 	}
 }
 
+// Parse out {{ }} and {% %} clauses
 func walkThrough(content []byte) {
 	preIter := 0
 	for iter := 0; iter < len(content); iter++ {
@@ -85,7 +83,7 @@ func walkThrough(content []byte) {
 			switch content[iter+1] {
 			case '{':
 				if preIter < iter {
-					genHTML = append(genHTML, "_gen += `"+strings.Replace(string(content[preIter:iter]), "\n", `\n`, -1)+"`")
+					genHTML = append(genHTML, "_gen += `"+strings.Replace(string(content[preIter:iter]), "\n", "", -1)+"`")
 				}
 				found := false
 				for nextIter := iter; nextIter < len(content)-1; nextIter++ {
@@ -104,7 +102,7 @@ func walkThrough(content []byte) {
 
 			case '%':
 				if preIter < iter {
-					genHTML = append(genHTML, "_gen += `"+strings.Replace(string(content[preIter:iter]), "\n", `\n`, -1)+"`")
+					genHTML = append(genHTML, "_gen += `"+strings.Replace(string(content[preIter:iter]), "\n", "", -1)+"`")
 				}
 				found := false
 				for nextIter := iter; nextIter < len(content)-1; nextIter++ {
@@ -125,14 +123,16 @@ func walkThrough(content []byte) {
 		}
 	}
 	if preIter < len(content) {
-		genHTML = append(genHTML, "_gen += `"+strings.Replace(string(content[preIter:]), "\n", `\n`, -1)+"`")
+		genHTML = append(genHTML, "_gen += `"+strings.Replace(string(content[preIter:]), "\n", "", -1)+"`")
 	}
 }
 
+// Asynchronous write chan
 func write(c chan string, i string) {
 	c <- i
 }
 
+// Infer the type of variable
 func inferTypes(variable string, r chan string) {
 	if strings.ContainsRune(variable, '|') { // for loop
 		vars := strings.Split(variable, "|")
@@ -158,6 +158,7 @@ func inferTypes(variable string, r chan string) {
 	}
 }
 
+// Multiprocess type inference
 func varInfer() {
 	varInferring = make(map[string]chan string)
 	varType = make(map[string]string)
@@ -187,6 +188,7 @@ func varInfer() {
 	}
 }
 
+// Extract variable from the map
 func singleVarFill(v string, c chan string) {
 	switch varType[v] {
 	case "string":
@@ -258,6 +260,7 @@ func varFill() {
 	sort.Sort(construct)
 }
 
+// Extract variable in For clauses
 func inFor(v string) bool {
 	for _, i := range vars {
 		if strings.HasPrefix(i, v+"|") {

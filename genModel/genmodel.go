@@ -38,16 +38,17 @@ func jsonParse(data []byte) map[string]map[string]map[string]string {
 var gensql []string
 
 func genModel(data map[string]map[string]map[string]string) string {
-	model := "package Model\n\nimport \"database/sql\"\n\n\nvar tables map[string]*TableType\n\nfunc init(){\ndatabase.connect(`main.sqlite`)\ntables = make(map[string]*TableType)\n\n"
+	model := "package main\n\nimport (\n\"database/sql\"\n\"go-rails/Model\"\n)\n\n\nvar Tables map[string]*Model.TableType\nvar database Model.DB\n\nfunc init(){\ndatabase.Connect(`main.sqlite`)\nTables = make(map[string]*Model.TableType)\n\n"
 
 	for table, v := range data {
 		genTable := `CREATE TABLE ` + table + `(id INTEGER PRIMARY KEY AUTOINCREMENT,`
 
-		model += "tables[`" + table + "`] = &TableType{}\n"
-		model += "tables[`" + table + "`].name = `" + table + "`\n"
-		model += "tables[`" + table + "`].v = []CellStruct{{`id`, INT},"
+		model += "Tables[`" + table + "`] = &Model.TableType{}\n"
+		model += "Tables[`" + table + "`].Name = `" + table + "`\n"
+		model += "Tables[`" + table + "`].Database = database\n"
+		model += "Tables[`" + table + "`].V = []Model.CellStruct{{`id`, Model.INT},"
 
-		cells := "[]Cell{{`id`, INT, ``},"
+		cells := "[]Model.Cell{{`id`, Model.INT, ``},"
 		scanint := 0
 		for name, props := range v {
 			if name == "id" {
@@ -62,18 +63,18 @@ func genModel(data map[string]map[string]map[string]string) string {
 			if val, ok := props["default"]; ok {
 				genTable += ` DEFAULT ` + val
 			}
-			model += "{`" + name + "`, " + props["type"] + "},"
-			cells += "{`" + name + "`, " + props["type"] + ", ``},"
+			model += "{`" + name + "`, Model." + props["type"] + "},"
+			cells += "{`" + name + "`, Model." + props["type"] + ", ``},"
 			genTable += ","
 			scanint ++
 		}
 		gensql = append(gensql, genTable[:len(genTable)-1]+`);`)
-		model = model[:len(model)-1] + "}\ntables[`" + table + "`].query = func(rows *sql.Rows) (t Table) {\nvar tabledata [][]Cell\ndefer rows.Close()\nfor rows.Next() {\ntabulardata :="
+		model = model[:len(model)-1] + "}\nTables[`" + table + "`].Query = func(rows *sql.Rows) (t Model.Table) {\nvar tabledata [][]Model.Cell\ndefer rows.Close()\nfor rows.Next() {\ntabulardata :="
 		model += cells[:len(cells)-1] + "}\nvar scan [" + strconv.Itoa(scanint + 1) + "]interface{}\nerr := rows.Scan("
 		for i := 0; i <= scanint;i++{
 			model += "&scan[" + strconv.Itoa(i) + "],"
 		}
-		model = model[:len(model)-1] + ")\nfor i:=0;i<=" + strconv.Itoa(scanint) + ";i++ {\ntabulardata[i].data = Cast(tabulardata[i], scan[i])\n}\ncheckErrorDB(err)\ntabledata = append(tabledata, tabulardata)\n}\nt = tabledata\nreturn t\n}\n"
+		model = model[:len(model)-1] + ")\nfor i:=0;i<=" + strconv.Itoa(scanint) + ";i++ {\ntabulardata[i].Data = Model.Cast(tabulardata[i], scan[i])\n}\nModel.CheckErrorDB(err)\ntabledata = append(tabledata, tabulardata)\n}\nt = tabledata\nreturn t\n}\n"
 	}
 
 	model += "\n}\n"

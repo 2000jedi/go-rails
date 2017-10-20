@@ -1,6 +1,5 @@
+// A package to preprocess sql database types
 package Model
-
-// Example: table["user"].all(); table["user"].count()
 
 import (
 	"database/sql"
@@ -8,27 +7,29 @@ import (
 	"time"
 )
 
-type CellType int
+type cellType int
 
 type CellStruct struct {
-	name string
-	T    CellType
+	Name string
+	T    cellType
 }
 
 type Cell struct {
-	name string
-	T    CellType
-	data string
+	Name string
+	T    cellType
+	Data string
 }
 
 type TableType struct {
-	name  string
-	v     []CellStruct
-	query func(rows *sql.Rows) Table // perform rows.Scan() action
+	Name  string
+	V     []CellStruct
+	Query func(rows *sql.Rows) Table // perform rows.Scan() action
+	Database DB
 }
 
 type Table [][]Cell
 
+// Cast all cell to string
 func Cast(cell Cell, data interface{}) string {
 	switch cell.T {
 	case INT:
@@ -50,17 +51,19 @@ func Cast(cell Cell, data interface{}) string {
 	}
 }
 
-func (m TableType) all() Table {
-	queryString := `select * from '` + m.name + `'`
-	return database.query(queryString, m)
+// Selecting data from database
+func (m TableType) All() Table {
+	queryString := `select * from '` + m.Name + `'`
+	return m.Database.query(queryString, m)
 }
 
-func (m TableType) count() int {
-	return database.count(m.name)
+func (m TableType) Count() int {
+	return m.Database.count(m.Name)
 }
 
+// Types in database
 const (
-	CHAR       CellType = iota // varchar
+	CHAR       cellType = iota // varchar
 	TEXT                       // text
 	INT                        // int
 	FLOAT                      // float
@@ -68,5 +71,3 @@ const (
 	DATETIME                   // datetime
 	FOREIGNKEY                 // int (id)
 )
-
-var database DB
