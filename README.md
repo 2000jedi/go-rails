@@ -2,10 +2,13 @@
 A ruby on rail static analysis for golang
 This application aims at providing a rail-like framework for golang.
 
-Current Progress:
+Completed:
 1. Template Conversion
+2. Model
+
+Current Progress:
+No :(
 
 Future Works:
-1. Model
-2. Viewer
-3. Controler
+1. Viewer
+2. Controler
